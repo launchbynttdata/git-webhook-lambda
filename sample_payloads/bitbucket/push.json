@@ -1,0 +1,75 @@
+{
+    "eventKey": "repo:refs_changed",
+    "date": "2023-04-07T13:46:44+0000",
+    "actor": {
+        "name": "example",
+        "emailAddress": "example@example.com",
+        "id": 25561,
+        "displayName": "Example User",
+        "active": true,
+        "slug": "example",
+        "type": "NORMAL",
+        "links": {
+            "self": [
+                {
+                    "href": "https://bitbucket.example.com/users/example"
+                }
+            ]
+        }
+    },
+    "repository": {
+        "slug": "test-app",
+        "id": 9177,
+        "name": "test-app",
+        "hierarchyId": "73861089815972f80b34",
+        "scmId": "git",
+        "state": "AVAILABLE",
+        "statusMessage": "Available",
+        "forkable": true,
+        "project": {
+            "key": "DSO",
+            "id": 5283,
+            "name": "DevSecOps",
+            "public": false,
+            "type": "NORMAL",
+            "links": {
+                "self": [
+                    {
+                        "href": "https://bitbucket.example.com/projects/DSO"
+                    }
+                ]
+            }
+        },
+        "public": false,
+        "links": {
+            "clone": [
+                {
+                    "href": "ssh://git@bitbucket.example.com:7999/dso/test-app.git",
+                    "name": "ssh"
+                },
+                {
+                    "href": "https://bitbucket.example.com/scm/dso/test-app.git",
+                    "name": "http"
+                }
+            ],
+            "self": [
+                {
+                    "href": "https://bitbucket.example.com/projects/DSO/repos/test-app/browse"
+                }
+            ]
+        }
+    },
+    "changes": [
+        {
+            "ref": {
+                "id": "refs/heads/feature/test",
+                "displayId": "feature/test",
+                "type": "BRANCH"
+            },
+            "refId": "refs/heads/feature/test",
+            "fromHash": "233a5363da78f3be1f9f0ca72d3c007556639bd3",
+            "toHash": "4e72bc1ec9688f2f0ad0870446793c3aa2bc286e",
+            "type": "UPDATE"
+        }
+    ]
+}

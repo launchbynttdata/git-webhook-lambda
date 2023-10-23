@@ -1,0 +1,251 @@
+{
+    "eventKey": "pr:merged",
+    "date": "2023-05-23T15:03:40+0000",
+    "actor": {
+        "name": "example",
+        "emailAddress": "example@example.com",
+        "id": 25890,
+        "displayName": "Example User",
+        "active": true,
+        "slug": "example",
+        "type": "NORMAL",
+        "links": {
+            "self": [
+                {
+                    "href": "https://bitbucket.example.com/users/example"
+                }
+            ]
+        }
+    },
+    "pullRequest": {
+        "id": 6,
+        "version": 5,
+        "title": "DEMO-1234: empty commit",
+        "state": "MERGED",
+        "open": false,
+        "closed": true,
+        "createdDate": 1684795368419,
+        "updatedDate": 1684854220564,
+        "closedDate": 1684854220564,
+        "fromRef": {
+            "id": "refs/heads/feature/test-merge-1",
+            "displayId": "feature/test-merge-1",
+            "latestCommit": "5860327d5635453fad8f6f97d7bfbb2b11ad3538",
+            "type": "BRANCH",
+            "repository": {
+                "slug": "test-app",
+                "id": 9177,
+                "name": "test-app",
+                "hierarchyId": "73861089815972f80b34",
+                "scmId": "git",
+                "state": "AVAILABLE",
+                "statusMessage": "Available",
+                "forkable": true,
+                "project": {
+                    "key": "DSO",
+                    "id": 5283,
+                    "name": "DevSecOps",
+                    "public": false,
+                    "type": "NORMAL",
+                    "links": {
+                        "self": [
+                            {
+                                "href": "https://bitbucket.example.com/projects/DSO"
+                            }
+                        ]
+                    }
+                },
+                "public": false,
+                "links": {
+                    "clone": [
+                        {
+                            "href": "ssh://git@bitbucket.example.com:7999/dso/test-app.git",
+                            "name": "ssh"
+                        },
+                        {
+                            "href": "https://bitbucket.example.com/scm/dso/test-app.git",
+                            "name": "http"
+                        }
+                    ],
+                    "self": [
+                        {
+                            "href": "https://bitbucket.example.com/projects/DSO/repos/test-app/browse"
+                        }
+                    ]
+                }
+            }
+        },
+        "toRef": {
+            "id": "refs/heads/feature/test",
+            "displayId": "feature/test",
+            "latestCommit": "ea6adff85c07e445152fbfeb5f30895f3ebb3fc3",
+            "type": "BRANCH",
+            "repository": {
+                "slug": "test-app",
+                "id": 9177,
+                "name": "test-app",
+                "hierarchyId": "73861089815972f80b34",
+                "scmId": "git",
+                "state": "AVAILABLE",
+                "statusMessage": "Available",
+                "forkable": true,
+                "project": {
+                    "key": "DSO",
+                    "id": 5283,
+                    "name": "DevSecOps",
+                    "public": false,
+                    "type": "NORMAL",
+                    "links": {
+                        "self": [
+                            {
+                                "href": "https://bitbucket.example.com/projects/DSO"
+                            }
+                        ]
+                    }
+                },
+                "public": false,
+                "links": {
+                    "clone": [
+                        {
+                            "href": "ssh://git@bitbucket.example.com:7999/dso/test-app.git",
+                            "name": "ssh"
+                        },
+                        {
+                            "href": "https://bitbucket.example.com/scm/dso/test-app.git",
+                            "name": "http"
+                        }
+                    ],
+                    "self": [
+                        {
+                            "href": "https://bitbucket.example.com/projects/DSO/repos/test-app/browse"
+                        }
+                    ]
+                }
+            }
+        },
+        "locked": false,
+        "author": {
+            "user": {
+                "name": "example",
+                "emailAddress": "example@example.com",
+                "id": 25890,
+                "displayName": "Example User",
+                "active": true,
+                "slug": "example",
+                "type": "NORMAL",
+                "links": {
+                    "self": [
+                        {
+                            "href": "https://bitbucket.example.com/users/example"
+                        }
+                    ]
+                }
+            },
+            "role": "AUTHOR",
+            "approved": false,
+            "status": "UNAPPROVED"
+        },
+        "reviewers": [
+            {
+                "user": {
+                    "name": "user1",
+                    "emailAddress": "user1@example.com",
+                    "id": 25357,
+                    "displayName": "User 1",
+                    "active": true,
+                    "slug": "user1",
+                    "type": "NORMAL",
+                    "links": {
+                        "self": [
+                            {
+                                "href": "https://bitbucket.example.com/users/user1"
+                            }
+                        ]
+                    }
+                },
+                "role": "REVIEWER",
+                "approved": false,
+                "status": "UNAPPROVED"
+            },
+            {
+                "user": {
+                    "name": "user2",
+                    "emailAddress": "user2@example.com",
+                    "id": 25987,
+                    "displayName": "User 2",
+                    "active": true,
+                    "slug": "user2",
+                    "type": "NORMAL",
+                    "links": {
+                        "self": [
+                            {
+                                "href": "https://bitbucket.example.com/users/user2"
+                            }
+                        ]
+                    }
+                },
+                "lastReviewedCommit": "dc27870d3e04d90f8553d8341681f8a94be9e8d4",
+                "role": "REVIEWER",
+                "approved": true,
+                "status": "APPROVED"
+            },
+            {
+                "user": {
+                    "name": "user3",
+                    "emailAddress": "user3@example.com",
+                    "id": 25360,
+                    "displayName": "User 3",
+                    "active": true,
+                    "slug": "user3",
+                    "type": "NORMAL",
+                    "links": {
+                        "self": [
+                            {
+                                "href": "https://bitbucket.example.com/users/user3"
+                            }
+                        ]
+                    }
+                },
+                "lastReviewedCommit": "dc27870d3e04d90f8553d8341681f8a94be9e8d4",
+                "role": "REVIEWER",
+                "approved": true,
+                "status": "APPROVED"
+            },
+            {
+                "user": {
+                    "name": "user4",
+                    "emailAddress": "user4@example.com",
+                    "id": 25561,
+                    "displayName": "User 4",
+                    "active": true,
+                    "slug": "user4",
+                    "type": "NORMAL",
+                    "links": {
+                        "self": [
+                            {
+                                "href": "https://bitbucket.example.com/users/user4"
+                            }
+                        ]
+                    }
+                },
+                "role": "REVIEWER",
+                "approved": false,
+                "status": "UNAPPROVED"
+            }
+        ],
+        "participants": [],
+        "properties": {
+            "mergeCommit": {
+                "displayId": "ce719f4ba19",
+                "id": "ce719f4ba19afb26964ff184980f43010c10785f"
+            }
+        },
+        "links": {
+            "self": [
+                {
+                    "href": "https://bitbucket.example.com/projects/DSO/repos/test-app/pull-requests/6"
+                }
+            ]
+        }
+    }
+}
