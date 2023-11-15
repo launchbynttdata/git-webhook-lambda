@@ -29,8 +29,6 @@ def validate_lambda_env_vars(env_vars: dict):
         'CODEBUILD_PROJECT_NAME',
         'CODEBUILD_ENV_VARS_MAP',
         'CODEBUILD_URL',
-        'GIT_CALLBACK_URI',
-        'GIT_CALLBACK_PAYLOAD'
         'GIT_SERVER_URL',
         'GIT_USERNAME_SM_ARN',
         'GIT_TOKEN_SM_ARN',
@@ -60,7 +58,12 @@ def lambda_handler(event, context):
         normalized_headers = {k.lower(): v for k, v in event['headers'].items()}
         logger.debug(f"Headers: {normalized_headers}")
 
-        event_type = normalized_headers['x-event-key']
+        if 'x-event-key' in normalized_headers:
+            event_type = normalized_headers['x-event-key']
+        elif 'x-github-event' in normalized_headers:
+            event_type = normalized_headers['x-github-event']
+        else:
+            logger.error(f"Event type not found in headers {normalized_headers}")
         logger.info(f"Event type: {event_type}")
 
         # Respond to webhook test event
@@ -74,7 +77,7 @@ def lambda_handler(event, context):
                                          f" {lambda_env_vars.get('WEBHOOK_EVENT_TYPE')}")
 
         # Validate message digital signature
-        if str(lambda_env_vars.get('VALIDATE_DIGITAL_SIGNATURE', 'FALSE').lower() == 'true'):
+        if str(lambda_env_vars.get('VALIDATE_DIGITAL_SIGNATURE', 'FALSE').lower()) == 'true':
             git_secret = secrets_manager.get_secret_value(SecretId=str(lambda_env_vars.get('GIT_SECRET_SM_ARN'))).get('SecretString')
             lambda_env_vars['GIT_SECRET'] = str(git_secret)
             if not check_signature(git_secret, normalized_headers['x-hub-signature'], event['body']):
@@ -97,7 +100,7 @@ def lambda_handler(event, context):
         merged_env_vars = {**env_vars, **lambda_env_vars}
         merged_env_vars['GIT_USERNAME'] = str(git_username)
         merged_env_vars['GIT_TOKEN'] = str(git_token)
-        merged_env_vars['LATEST_SHORT_HASH'] = merged_env_vars['LATEST_COMMIT_HASH'][:7]
+        merged_env_vars['LATEST_SHORT_HASH'] = merged_env_vars.get('LATEST_COMMIT_HASH', "")[:7]
         merged_env_vars["CODEBUILD_STATUS"] = "INPROGRESS"
         merged_env_vars["CALLBACK_DESCRIPTION"] = f"CodeBuild job with id: {codebuild_id} is submitted successfully."
         # Invoke the Git callback and update the build as "INPROGRESS"
@@ -205,8 +208,16 @@ def start_codebuild_job(project_name, env_vars: dict):
 def invoke_git_callback(merged_env_vars, auth):
     # Create URL object for the HTTP endpoint
     pattern = r"\{\{(\w+)\}\}"
-    url = merged_env_vars['GIT_CALLBACK_URI']
-    payload = merged_env_vars['GIT_CALLBACK_PAYLOAD']
+    url = merged_env_vars.get('GIT_CALLBACK_URI', None)
+    if not url:
+        logger.info(f"Did not find callback url to set build status: {url}")
+        return 200
+
+    try:
+        payload = merged_env_vars['GIT_CALLBACK_PAYLOAD']
+    except KeyError:
+        logger.error(f"GIT_CALLBACK_PAYLOAD must be set if GIT_CALLBACK_URI is set: {e}")
+        raise e
 
     # Create request headers
     headers = {

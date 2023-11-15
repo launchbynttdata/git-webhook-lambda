@@ -21,13 +21,6 @@ CODEBUILD_PROJECT_NAME=bitbucket-codebuild-webhook
 CODEBUILD_URL=https://us-east-2.console.aws.amazon.com/codesuite/codebuild/projects?region=us-east-2
 # Git Callback payload (to update the status of the webhook)
 # Below example is for BitBucket payload
-GIT_CALLBACK_PAYLOAD={"state": "{{CODEBUILD_STATUS}}", "key": "{{CODEBUILD_PROJECT_NAME}}-{{LATEST_SHORT_HASH}}", "name": "{{CODEBUILD_PROJECT_NAME}}", "url": "{{CODEBUILD_URL}}", "description": "{{CALLBACK_DESCRIPTION}}" }
-# Git Callback URI (to update the status of the webhook)
-# LATEST_COMMIT_HASH must be a key in CODEBUILD_ENV_VARS_MAP
-# Below example is for BitBucket callback URI
-GIT_CALLBACK_URI={{GIT_SERVER_URL}}/rest/build-status/1.0/commits/{{LATEST_COMMIT_HASH}}
-# Salt used to create digital signature. Required if VALIDATE_DIGITAL_SIGNATURE=true
-# For Bitbucket, this is configured while creating the webhook
 GIT_SECRET=<git_secret>
 # URL of the Git provider URL
 GIT_SERVER_URL=https://bitbucket.example.com
@@ -44,7 +37,18 @@ VALIDATE_DIGITAL_SIGNATURE=true
 WEBHOOK_EVENT_TYPE=repo:refs_changed
 ```
 
-## Webhook Events
+The following environment variables are optional if you wish to enable the codebuild build status callback feature. This does not work for github.
+```shell
+GIT_CALLBACK_PAYLOAD={"state": "{{CODEBUILD_STATUS}}", "key": "{{CODEBUILD_PROJECT_NAME}}-{{LATEST_SHORT_HASH}}", "name": "{{CODEBUILD_PROJECT_NAME}}", "url": "{{CODEBUILD_URL}}", "description": "{{CALLBACK_DESCRIPTION}}" }
+# Git Callback URI (to update the status of the webhook)
+# LATEST_COMMIT_HASH must be a key in CODEBUILD_ENV_VARS_MAP
+# Below example is for BitBucket callback URI
+GIT_CALLBACK_URI={{GIT_SERVER_URL}}/rest/build-status/1.0/commits/{{LATEST_COMMIT_HASH}}
+# Salt used to create digital signature. Required if VALIDATE_DIGITAL_SIGNATURE=true
+# For Bitbucket, this is configured while creating the webhook
+```
+
+## [Bitbucket] Webhook Events
 Our current plan supports the following webhook events
 - Push
   - Event Type `repo:refs_changed`
@@ -55,12 +59,23 @@ Our current plan supports the following webhook events
 - PR Merged
   - Event Type `pr:merged`
 
+## [Github] Webhook Events
+Our current plan supports the following webhook events
+- Pull request
+  - Event Type `pull_request`
+- PR Merged
+  - Event Type `closed`
+- PR Updated (source branch updated)
+  - Event Type `synchronize`
+- PR Opened
+  - Event Type `opened`
+
 ## CODEBUILD_ENV_VARS_MAP
 For each Git event the webhook would respond to, the lambda function has to be configured with a `dictionary/map` environment variable. The key of the map would be the environment variable to be passed to the `CodeBuild job` and the value would be the path in the webhook payload where the value be fetched. 
 
 Listed below are examples of the `CODEBUILD_ENV_VARS_MAP` for BitBucket events that will be supported in our project
 
-### Push
+### [Bitbucket] Push
 ```shell
 {
     "REPOSITORY_URL": "repository.links.clone[name=http].href",
@@ -75,7 +90,7 @@ Listed below are examples of the `CODEBUILD_ENV_VARS_MAP` for BitBucket events t
 }
 ```
 
-## PR Opened
+## [Bitbucket] PR Opened
 ```shell
 {
     "REPOSITORY_URL": "pullRequest.fromRef.repository.links.clone[name=http].href",
@@ -90,7 +105,7 @@ Listed below are examples of the `CODEBUILD_ENV_VARS_MAP` for BitBucket events t
 }
 ```
 
-## PR Updated
+## [Bitbucket] PR Updated
 ```shell
 {
     "REPOSITORY_URL": "pullRequest.fromRef.repository.links.clone[name=http].href",
@@ -106,7 +121,17 @@ Listed below are examples of the `CODEBUILD_ENV_VARS_MAP` for BitBucket events t
 }
 ```
 
-## PR Merged
+## [Bitbucket] PR Merged
 ```shell
 TBD. Dont have one yet
+```
+
+## [Github] Pull request
+```shell
+{
+    "SOURCE_REPO_URL": "repository.clone_url",
+    "FROM_BRANCH": "pull_request.head.ref",
+    "TO_BRANCH": "pull_request.base.ref",
+    "MERGE_COMMIT_ID": "pull_request.head.sha"
+}
 ```
