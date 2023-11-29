@@ -61,7 +61,7 @@ def lambda_handler(event, context):
         if 'x-event-key' in normalized_headers:
             event_type = normalized_headers['x-event-key']
         elif 'x-github-event' in normalized_headers:
-            event_type = normalized_headers['x-github-event']
+            event_type = event_body['action']
         else:
             logger.error(f"Event type not found in headers {normalized_headers}")
         logger.info(f"Event type: {event_type}")
