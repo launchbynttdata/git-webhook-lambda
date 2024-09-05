@@ -60,15 +60,15 @@ def lambda_handler(event, context):
 
         if 'x-event-key' in normalized_headers:
             event_type = normalized_headers['x-event-key']
+            if event_type == "diagnostics:ping":
+                return prepare_response(200, 'Webhook configured successfully')
         elif 'x-github-event' in normalized_headers:
+            if normalized_headers["x-github-event"] == "ping":
+                return prepare_response(200, 'Webhook configured successfully')
             event_type = event_body['action']
         else:
             logger.error(f"Event type not found in headers {normalized_headers}")
         logger.info(f"Event type: {event_type}")
-
-        # Respond to webhook test event
-        if 'x-event-key' in normalized_headers and normalized_headers['x-event-key'] == 'diagnostics:ping':
-            return prepare_response(200, 'Webhook configured successfully')
 
         # Verify if the lambda is configured for correct event_type
         if str(event_type).lower() != str(lambda_env_vars.get('WEBHOOK_EVENT_TYPE')).lower():
