@@ -30,8 +30,6 @@ def validate_lambda_env_vars(env_vars: dict):
         'CODEBUILD_ENV_VARS_MAP',
         'CODEBUILD_URL',
         'GIT_SERVER_URL',
-        'GIT_USERNAME_SM_ARN',
-        'GIT_TOKEN_SM_ARN',
         'WEBHOOK_EVENT_TYPE',
         'VALIDATE_DIGITAL_SIGNATURE'
     ]
