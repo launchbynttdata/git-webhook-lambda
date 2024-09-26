@@ -173,7 +173,7 @@ def prepare_codebuild_inputs(body: dict, lambda_env_vars: dict):
         logger.debug(f"env_vars_dict={env_vars_dict}")
         logger.debug(f"type of env_vars_dict: {type(env_vars_dict)}")
         for env_var, json_path in env_vars_dict.items():
-            code_build_env_vars[env_var] = get_value_from_dict(body, json_path)
+            code_build_env_vars[env_var] = str(get_value_from_dict(body, json_path))
         # Add any other Env Vars we want to pass to CodeBuild.
         for key, value in os.environ.items():
             if key.startswith("USERVAR_") or key.startswith("GIT_"):
