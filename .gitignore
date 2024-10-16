@@ -4,3 +4,5 @@ venv
 terraform/
 packages/
 *.zip
+.devcontainer
+.venv

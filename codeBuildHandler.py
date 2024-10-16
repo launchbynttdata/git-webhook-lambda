@@ -5,9 +5,24 @@ import logging
 import os
 import re
 import traceback
+from pdb import set_trace
 
 import boto3
 import requests
+
+# GITHUB_ENABLED_EVENTS = {
+#     'opened': 'oscar-git-webhook',
+#     'edited': 'oscar-git-webhook',
+#     'closed': 'oscar-git-webhook',
+#     'reopened': 'oscar-git-webhook',
+#     'assigned': 'oscar-git-webhook',
+#     'unassigned': 'oscar-git-webhook',
+#     'review_requested': 'oscar-git-webhook',
+#     'review_request_removed': 'oscar-git-webhook',
+#     'labeled': 'oscar-git-webhook-labeled',
+#     'unlabeled': 'oscar-git-webhook-labeled',
+#     'synchronize': 'oscar-git-webhook'
+# }
 
 # Initialize logger
 logger = logging.getLogger()
@@ -21,6 +36,7 @@ logger.setLevel(logging.getLevelName(logging_level))
 # Initialize boto3
 s3 = boto3.client('s3')
 code_build = boto3.client('codebuild')
+code_pipeline = boto3.client('codepipeline')
 secrets_manager = boto3.client('secretsmanager')
 
 
@@ -33,7 +49,8 @@ def validate_lambda_env_vars(env_vars: dict):
         'GIT_USERNAME_SM_ARN',
         'GIT_TOKEN_SM_ARN',
         'WEBHOOK_EVENT_TYPE',
-        'VALIDATE_DIGITAL_SIGNATURE'
+        'VALIDATE_DIGITAL_SIGNATURE',
+        'GITHUB_ENABLED_EVENTS',
     ]
     validation_errors = []
     valid = True
@@ -47,6 +64,7 @@ def validate_lambda_env_vars(env_vars: dict):
 def lambda_handler(event, context):
     try:
         lambda_env_vars = {key: value for key, value in os.environ.items()}
+        gh_events_map = json.loads(lambda_env_vars.get("GITHUB_ENABLED_EVENTS", {}))
         valid, validation_message = validate_lambda_env_vars(lambda_env_vars)
         if not valid:
             return prepare_response(500, f"Following mandatory lambda vars not set: {validation_message}")
@@ -71,7 +89,7 @@ def lambda_handler(event, context):
         logger.info(f"Event type: {event_type}")
 
         # Verify if the lambda is configured for correct event_type
-        if str(event_type).lower() != str(lambda_env_vars.get('WEBHOOK_EVENT_TYPE')).lower():
+        if str(event_type).lower() not in list(gh_events_map.keys()):
             return prepare_response(500, f"The webhook event_type: {event_type} "
                                          f"doesn't match lambda function's event type:"
                                          f" {lambda_env_vars.get('WEBHOOK_EVENT_TYPE')}")
@@ -89,7 +107,9 @@ def lambda_handler(event, context):
                                          "Please verify the env var: CODEBUILD_ENV_VARS_MAP")
 
         # Invoke the CodeBuild Job
-        codebuild_id = start_codebuild_job(lambda_env_vars.get('CODEBUILD_PROJECT_NAME'), env_vars)
+        logger.debug(f"About to start the pipeline: {gh_events_map.get(event), env_vars}")
+        codepipeline_id = start_codepipeline_job(gh_events_map.get(event), env_vars)
+        logger.debug(f"CodePipeline: {codepipeline_id}")
 
         # Authentication
         git_username = secrets_manager.get_secret_value(SecretId=str(lambda_env_vars.get('GIT_USERNAME_SM_ARN'))).get('SecretString')
@@ -97,16 +117,17 @@ def lambda_handler(event, context):
         auth = (str(git_username), str(git_token))
 
         # Merging both dictionaries are required for the logic in invoking callback method
+
         merged_env_vars = {**env_vars, **lambda_env_vars}
         merged_env_vars['GIT_USERNAME'] = str(git_username)
         merged_env_vars['GIT_TOKEN'] = str(git_token)
         merged_env_vars['LATEST_SHORT_HASH'] = merged_env_vars.get('LATEST_COMMIT_HASH', "")[:7]
         merged_env_vars["CODEBUILD_STATUS"] = "INPROGRESS"
-        merged_env_vars["CALLBACK_DESCRIPTION"] = f"CodeBuild job with id: {codebuild_id} is submitted successfully."
+        merged_env_vars["CALLBACK_DESCRIPTION"] = f"CodeBuild job with id: {codepipeline_id} is submitted successfully."
         # Invoke the Git callback and update the build as "INPROGRESS"
         status = invoke_git_callback(merged_env_vars, auth)
         # Respond to the webhook request
-        return prepare_response(status, f"Codebuild stated with an id: {codebuild_id}")
+        return prepare_response(status, f"Codebuild stated with an id: {codepipeline_id}")
 
     except Exception as e:
         logger.error(e)
@@ -187,22 +208,23 @@ def prepare_codebuild_inputs(body: dict, lambda_env_vars: dict):
     return code_build_env_vars
 
 
-def start_codebuild_job(project_name, env_vars: dict):
+def start_codepipeline_job(project_name, env_vars: dict):
 
-    logger.info(f"Starting CodeBuild job for project: {project_name}")
+    logger.info(f"Starting CodePipeline job for project: {project_name}")
     try:
-        code_build_env_vars = [
+        code_pipeline_env_vars = [
             {
                 'name': key,
                 'value': value
             } for key, value in env_vars.items()
         ]
-        response = code_build. \
-            start_build(projectName=project_name,
-                        environmentVariablesOverride=code_build_env_vars)
+        response = code_pipeline. \
+            start_pipeline_execution(name=project_name,
+                        variables=code_pipeline_env_vars)
+        set_trace()
     except Exception as e:
         raise e
-    return response["build"]["id"]
+    return response["pipelineExecutionId"]
 
 
 def invoke_git_callback(merged_env_vars, auth):
