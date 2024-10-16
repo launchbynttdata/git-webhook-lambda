@@ -5,7 +5,6 @@ import logging
 import os
 import re
 import traceback
-from pdb import set_trace
 
 import boto3
 import requests
@@ -35,7 +34,6 @@ logger.setLevel(logging.getLevelName(logging_level))
 
 # Initialize boto3
 s3 = boto3.client('s3')
-code_build = boto3.client('codebuild')
 code_pipeline = boto3.client('codepipeline')
 secrets_manager = boto3.client('secretsmanager')
 
@@ -60,6 +58,29 @@ def validate_lambda_env_vars(env_vars: dict):
             valid = False
     return valid, " ".join(validation_errors)
 
+def entrypoint():
+    event = {
+        'body': json.dumps({
+            'action': 'opened',
+            'pull_request': {
+                'base': {
+                    'ref': 'main',
+                },
+            'head': {
+                'ref': 'feature/new_file',
+                'sha': '3c182daae67ddf44f30865914a8c89e3330c1c56',
+                }
+            },
+            'repository': {
+                'clone_url': 'https://github.com/example-org/example-repo.git',
+            }
+        }),
+        'headers': {
+            'Content-Type': 'application/json',
+            'x-github-event': 'labeled'
+        },
+    }
+    lambda_handler(event, False)
 
 def lambda_handler(event, context):
     try:
@@ -101,14 +122,14 @@ def lambda_handler(event, context):
             if not check_signature(git_secret, normalized_headers['x-hub-signature'], event['body']):
                 logger.error('Invalid webhook message signature')
                 return prepare_response(401, 'Signature is not valid')
-        env_vars = prepare_codebuild_inputs(event_body, lambda_env_vars)
+        env_vars = prepare_codepipeline_inputs(event_body, lambda_env_vars)
         if not env_vars:
             return prepare_response(500, "Unable to parse webhook payload, "
                                          "Please verify the env var: CODEBUILD_ENV_VARS_MAP")
 
-        # Invoke the CodeBuild Job
-        logger.debug(f"About to start the pipeline: {gh_events_map.get(event), env_vars}")
-        codepipeline_id = start_codepipeline_job(gh_events_map.get(event), env_vars)
+        # Invoke the CodePipeline Job
+        logger.debug(f"About to start the pipeline: {gh_events_map.get(event_type), env_vars}")
+        codepipeline_id = start_codepipeline_job(gh_events_map.get(event_type), env_vars)
         logger.debug(f"CodePipeline: {codepipeline_id}")
 
         # Authentication
@@ -185,8 +206,8 @@ def prepare_response(status_code, detail="An unknown error has occurred."):
     return response
 
 
-def prepare_codebuild_inputs(body: dict, lambda_env_vars: dict):
-    code_build_env_vars = {}
+def prepare_codepipeline_inputs(body: dict, lambda_env_vars: dict):
+    code_pipeline_env_vars = {}
 
     try:
         logger.debug(f"CODEBUILD_ENV_VARS_MAP={lambda_env_vars.get('CODEBUILD_ENV_VARS_MAP')}")
@@ -194,18 +215,18 @@ def prepare_codebuild_inputs(body: dict, lambda_env_vars: dict):
         logger.debug(f"env_vars_dict={env_vars_dict}")
         logger.debug(f"type of env_vars_dict: {type(env_vars_dict)}")
         for env_var, json_path in env_vars_dict.items():
-            code_build_env_vars[env_var] = get_value_from_dict(body, json_path)
+            code_pipeline_env_vars[env_var] = get_value_from_dict(body, json_path)
         # Add any other Env Vars we want to pass to CodeBuild.
         for key, value in os.environ.items():
             if key.startswith("USERVAR_") or key.startswith("GIT_"):
-                code_build_env_vars[key] = value
+                code_pipeline_env_vars[key] = value
     except Exception as e:
         logger.error(f"Error in parsing the webhook payload: {e}")
         traceback.print_exc()
 
-    logger.info(f"Environment variables to be passed to CodeBuild: {code_build_env_vars}")
+    logger.info(f"Environment variables to be passed to CodePipeline: {code_pipeline_env_vars}")
 
-    return code_build_env_vars
+    return code_pipeline_env_vars
 
 
 def start_codepipeline_job(project_name, env_vars: dict):
@@ -221,7 +242,6 @@ def start_codepipeline_job(project_name, env_vars: dict):
         response = code_pipeline. \
             start_pipeline_execution(name=project_name,
                         variables=code_pipeline_env_vars)
-        set_trace()
     except Exception as e:
         raise e
     return response["pipelineExecutionId"]
