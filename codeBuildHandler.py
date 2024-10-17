@@ -9,20 +9,6 @@ import traceback
 import boto3
 import requests
 
-# GITHUB_ENABLED_EVENTS = {
-#     'opened': 'oscar-git-webhook',
-#     'edited': 'oscar-git-webhook',
-#     'closed': 'oscar-git-webhook',
-#     'reopened': 'oscar-git-webhook',
-#     'assigned': 'oscar-git-webhook',
-#     'unassigned': 'oscar-git-webhook',
-#     'review_requested': 'oscar-git-webhook',
-#     'review_request_removed': 'oscar-git-webhook',
-#     'labeled': 'oscar-git-webhook-labeled',
-#     'unlabeled': 'oscar-git-webhook-labeled',
-#     'synchronize': 'oscar-git-webhook'
-# }
-
 # Initialize logger
 logger = logging.getLogger()
 if os.environ.get("LOGGING_LEVEL") not in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
@@ -40,8 +26,7 @@ secrets_manager = boto3.client('secretsmanager')
 
 def validate_lambda_env_vars(env_vars: dict):
     mandatory_environment_vars = [
-        'CODEBUILD_PROJECT_NAME',
-        'CODEBUILD_ENV_VARS_MAP',
+        'CODEPIPELINE_ENV_VARS_MAP',
         'CODEBUILD_URL',
         'GIT_SERVER_URL',
         'GIT_USERNAME_SM_ARN',
@@ -125,7 +110,7 @@ def lambda_handler(event, context):
         env_vars = prepare_codepipeline_inputs(event_body, lambda_env_vars)
         if not env_vars:
             return prepare_response(500, "Unable to parse webhook payload, "
-                                         "Please verify the env var: CODEBUILD_ENV_VARS_MAP")
+                                         "Please verify the env var: CODEPIPELINE_ENV_VARS_MAP")
 
         # Invoke the CodePipeline Job
         logger.debug(f"About to start the pipeline: {gh_events_map.get(event_type), env_vars}")
@@ -210,8 +195,8 @@ def prepare_codepipeline_inputs(body: dict, lambda_env_vars: dict):
     code_pipeline_env_vars = {}
 
     try:
-        logger.debug(f"CODEBUILD_ENV_VARS_MAP={lambda_env_vars.get('CODEBUILD_ENV_VARS_MAP')}")
-        env_vars_dict = json.loads(lambda_env_vars.get('CODEBUILD_ENV_VARS_MAP'))
+        logger.debug(f"CODEPIPELINE_ENV_VARS_MAP={lambda_env_vars.get('CODEPIPELINE_ENV_VARS_MAP')}")
+        env_vars_dict = json.loads(lambda_env_vars.get('CODEPIPELINE_ENV_VARS_MAP'))
         logger.debug(f"env_vars_dict={env_vars_dict}")
         logger.debug(f"type of env_vars_dict: {type(env_vars_dict)}")
         for env_var, json_path in env_vars_dict.items():
