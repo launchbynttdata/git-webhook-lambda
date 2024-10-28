@@ -197,9 +197,9 @@ def prepare_codepipeline_inputs(body: dict, lambda_env_vars: dict):
     return code_pipeline_env_vars
 
 
-def start_codepipeline_job(project_name, env_vars: dict):
+def start_codepipeline_job(codepipeline_name, env_vars: dict):
 
-    logger.info(f"Starting CodePipeline job for project: {project_name}")
+    logger.info(f"Starting job for CodePipeline: {codepipeline_name}")
     try:
         code_pipeline_env_vars = [
             {
@@ -208,7 +208,7 @@ def start_codepipeline_job(project_name, env_vars: dict):
             } for key, value in env_vars.items()
         ]
         response = code_pipeline. \
-            start_pipeline_execution(name=project_name,
+            start_pipeline_execution(name=codepipeline_name,
                         variables=code_pipeline_env_vars)
     except Exception as e:
         raise e
