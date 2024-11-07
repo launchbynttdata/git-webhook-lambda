@@ -1,7 +1,7 @@
 import pytest
 from botocore.stub import Stubber
 
-from codeBuildHandler import code_pipeline
+from gitwebhooklambda.codeBuildHandler import code_pipeline
 
 @pytest.fixture()
 def codepipeline_stub():

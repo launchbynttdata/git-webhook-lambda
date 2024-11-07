@@ -1,8 +1,6 @@
 import json
-import pdb
-from pdb import set_trace
 
-import codeBuildHandler
+import gitwebhooklambda.codeBuildHandler as codeBuildHandler
 
 class TestSignature:
     payload_body='test'.encode('utf-8')
@@ -64,7 +62,7 @@ class TestPrepareInputs:
         'TO_BRANCH': 'pull_request.base.ref',
         'MERGE_COMMIT_ID': 'pull_request.head.sha'
     }
-    github_pr_open_payload =  json.load(open('./sample_payloads/github/pr_open.json'))
+    github_pr_open_payload_path = 'sample_payloads/github/pr_open.json'
     lambda_env_vars = {
         'CODEPIPELINE_ENV_VARS_MAP': json.dumps(codepipeline_env_vars_map),
     }
@@ -77,24 +75,20 @@ class TestPrepareInputs:
         'USERVAR_KEY2': 'VALUE2',
     }
 
-    # @pytest.fixture
-    # def mock_env_codepipeline(self, monkeypatch):
-    #     monkeypatch.setenv('CODEPIPELINE_ENV_VARS_MAP', json.dumps(self.codepipeline_env_vars_map))
-
     def test_prepare_codepipeline_inputs(self):
-        code_pipeline_env_vars = codeBuildHandler.prepare_codepipeline_inputs(self.github_pr_open_payload, self.lambda_env_vars)
+        code_pipeline_env_vars = codeBuildHandler.prepare_codepipeline_inputs(json.load(open(self.github_pr_open_payload_path)), self.lambda_env_vars)
         assert code_pipeline_env_vars.keys() == self.codepipeline_env_vars_map.keys()
 
     def test_prepare_codepipeline_inputs_with_git_vars(self, monkeypatch):
         for key, val in self.extra_git_env_vars.items():
             monkeypatch.setenv(key, val)
-        code_pipeline_env_vars = codeBuildHandler.prepare_codepipeline_inputs(self.github_pr_open_payload, self.lambda_env_vars)
+        code_pipeline_env_vars = codeBuildHandler.prepare_codepipeline_inputs(json.load(open(self.github_pr_open_payload_path)), self.lambda_env_vars)
         assert list(code_pipeline_env_vars.keys()) == list(self.codepipeline_env_vars_map.keys()) + list(self.extra_git_env_vars.keys())
 
     def test_prepare_codepipeline_inputs_with_user_vars(self, monkeypatch):
         for key, val in self.extra_user_env_vars.items():
             monkeypatch.setenv(key, val)
-        code_pipeline_env_vars = codeBuildHandler.prepare_codepipeline_inputs(self.github_pr_open_payload, self.lambda_env_vars)
+        code_pipeline_env_vars = codeBuildHandler.prepare_codepipeline_inputs(json.load(open(self.github_pr_open_payload_path)), self.lambda_env_vars)
         assert list(code_pipeline_env_vars.keys()) == list(self.codepipeline_env_vars_map.keys()) + list(self.extra_user_env_vars.keys())
 
 class TestBotoCalls:
