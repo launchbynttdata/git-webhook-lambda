@@ -7,3 +7,4 @@ packages/
 .devcontainer
 .venv
 source.env
+*__pycache__*

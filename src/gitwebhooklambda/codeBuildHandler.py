@@ -43,30 +43,6 @@ def validate_lambda_env_vars(env_vars: dict):
             valid = False
     return valid, " ".join(validation_errors)
 
-def entrypoint():
-    event = {
-        'body': json.dumps({
-            'action': 'opened',
-            'pull_request': {
-                'base': {
-                    'ref': 'main',
-                },
-            'head': {
-                'ref': 'feature/new_file',
-                'sha': '3c182daae67ddf44f30865914a8c89e3330c1c56',
-                }
-            },
-            'repository': {
-                'clone_url': 'https://github.com/example-org/example-repo.git',
-            }
-        }),
-        'headers': {
-            'Content-Type': 'application/json',
-            'x-github-event': 'labeled'
-        },
-    }
-    lambda_handler(event, False)
-
 def lambda_handler(event, context):
     try:
         lambda_env_vars = {key: value for key, value in os.environ.items()}
@@ -103,8 +79,10 @@ def lambda_handler(event, context):
         # Validate message digital signature
         if str(lambda_env_vars.get('VALIDATE_DIGITAL_SIGNATURE', 'FALSE').lower()) == 'true':
             git_secret = secrets_manager.get_secret_value(SecretId=str(lambda_env_vars.get('GIT_SECRET_SM_ARN'))).get('SecretString')
-            lambda_env_vars['GIT_SECRET'] = str(git_secret)
-            if not check_signature(git_secret, normalized_headers['x-hub-signature'], event['body']):
+            unserialized_secret = json.loads(git_secret)
+            lambda_env_vars['GIT_SECRET'] = unserialized_secret.get('SecretString', None)
+            # if not check_signature(git_secret, normalized_headers['x-hub-signature'], event['body']):
+            if not verify_signature(event['body'].encode('utf-8'), unserialized_secret.get('SecretString', None), normalized_headers['x-hub-signature-256']):
                 logger.error('Invalid webhook message signature')
                 return prepare_response(401, 'Signature is not valid')
         env_vars = prepare_codepipeline_inputs(event_body, lambda_env_vars)
@@ -133,7 +111,7 @@ def lambda_handler(event, context):
         # Invoke the Git callback and update the build as "INPROGRESS"
         status = invoke_git_callback(merged_env_vars, auth)
         # Respond to the webhook request
-        return prepare_response(status, f"Codebuild stated with an id: {codepipeline_id}")
+        return prepare_response(status, f"CodePipeline stated with an id: {codepipeline_id}")
 
     except Exception as e:
         logger.error(e)
@@ -146,20 +124,25 @@ def lambda_handler(event, context):
             logger.error(f"Unable to update Git webhook to FAILED. Resulted in error: {e}")
         return prepare_response(500, e)
 
+def verify_signature(payload_body, secret_token, signature_header):
+    """Verify that the payload was sent from GitHub by validating SHA256.
 
-def check_signature(signing_secret, signature, body):
-    logger.info("Checking signature")
-    # Create a digital signature by signing the body with the provided secret (pass in as env var)
-    digest = hmac.new(signing_secret.encode('utf-8'), body.encode('utf-8'), hashlib.sha256).hexdigest()
-    logger.debug(f"Digest = {digest}")
+    Raise and return 403 if not authorized.
 
-    signature_hash = signature.split('=')
-    # Compare the created signature against the one passed in as the webhook header
-    if signature_hash[1] == digest:
-        return True
-
-    return False
-
+    Args:
+        payload_body: original request body to verify (request.body())
+        secret_token: GitHub app webhook token (WEBHOOK_SECRET)
+        signature_header: header received from GitHub (x-hub-signature-256)
+    """
+    logger.info(f"Signature Header: {signature_header}")
+    if not signature_header:
+        return False
+    hash_object = hmac.new(secret_token.encode('utf-8'), msg=payload_body, digestmod=hashlib.sha256)
+    expected_signature = "sha256=" + hash_object.hexdigest()
+    logger.info(f"Computed signature: {expected_signature}")
+    if not hmac.compare_digest(expected_signature, signature_header):
+        return False
+    return True
 
 def prepare_response(status_code, detail="An unknown error has occurred."):
     if not status_code:
@@ -214,9 +197,9 @@ def prepare_codepipeline_inputs(body: dict, lambda_env_vars: dict):
     return code_pipeline_env_vars
 
 
-def start_codepipeline_job(project_name, env_vars: dict):
+def start_codepipeline_job(codepipeline_name, env_vars: dict):
 
-    logger.info(f"Starting CodePipeline job for project: {project_name}")
+    logger.info(f"Starting job for CodePipeline: {codepipeline_name}")
     try:
         code_pipeline_env_vars = [
             {
@@ -225,7 +208,7 @@ def start_codepipeline_job(project_name, env_vars: dict):
             } for key, value in env_vars.items()
         ]
         response = code_pipeline. \
-            start_pipeline_execution(name=project_name,
+            start_pipeline_execution(name=codepipeline_name,
                         variables=code_pipeline_env_vars)
     except Exception as e:
         raise e
