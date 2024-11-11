@@ -8,6 +8,7 @@ import traceback
 
 import boto3
 import requests
+from aws_lambda_powertools import Metrics, Tracer
 
 # Initialize logger
 logger = logging.getLogger()
@@ -23,7 +24,11 @@ s3 = boto3.client('s3')
 code_pipeline = boto3.client('codepipeline')
 secrets_manager = boto3.client('secretsmanager')
 
+# Initialize powertools
+tracer = Tracer(service='CodeBuildHandler')
+metrics = Metrics(namespace='WebhookHandler', service='CodeBuildHandler')
 
+@tracer.capture_method
 def validate_lambda_env_vars(env_vars: dict):
     mandatory_environment_vars = [
         'CODEPIPELINE_ENV_VARS_MAP',
@@ -43,6 +48,8 @@ def validate_lambda_env_vars(env_vars: dict):
             valid = False
     return valid, " ".join(validation_errors)
 
+@metrics.log_metrics(capture_cold_start_metric=True)
+@tracer.capture_lambda_handler
 def lambda_handler(event, context):
     try:
         lambda_env_vars = {key: value for key, value in os.environ.items()}
@@ -124,6 +131,7 @@ def lambda_handler(event, context):
             logger.error(f"Unable to update Git webhook to FAILED. Resulted in error: {e}")
         return prepare_response(500, e)
 
+@tracer.capture_method
 def verify_signature(payload_body, secret_token, signature_header):
     """Verify that the payload was sent from GitHub by validating SHA256.
 
@@ -144,6 +152,7 @@ def verify_signature(payload_body, secret_token, signature_header):
         return False
     return True
 
+@tracer.capture_method
 def prepare_response(status_code, detail="An unknown error has occurred."):
     if not status_code:
         raise TypeError('response_to_api_gw() expects at least argument status_code')
@@ -174,6 +183,7 @@ def prepare_response(status_code, detail="An unknown error has occurred."):
     return response
 
 
+@tracer.capture_method
 def prepare_codepipeline_inputs(body: dict, lambda_env_vars: dict):
     code_pipeline_env_vars = {}
 
@@ -197,6 +207,7 @@ def prepare_codepipeline_inputs(body: dict, lambda_env_vars: dict):
     return code_pipeline_env_vars
 
 
+@tracer.capture_method
 def start_codepipeline_job(codepipeline_name, env_vars: dict):
 
     logger.info(f"Starting job for CodePipeline: {codepipeline_name}")
@@ -215,6 +226,7 @@ def start_codepipeline_job(codepipeline_name, env_vars: dict):
     return response["pipelineExecutionId"]
 
 
+@tracer.capture_method
 def invoke_git_callback(merged_env_vars, auth):
     # Create URL object for the HTTP endpoint
     pattern = r"\{\{(\w+)\}\}"

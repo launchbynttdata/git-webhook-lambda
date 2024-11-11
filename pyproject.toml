@@ -30,7 +30,8 @@ classifiers = [
 dependencies = [
     "boto3>=1.34",
     "requests>2.32",
-    "pytest"
+    "pytest",
+    "aws_lambda_powertools[tracer]"
 ]
 
 [tool.pytest.ini_options]
