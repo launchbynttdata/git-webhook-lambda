@@ -2,15 +2,18 @@
 
 The lambda function acts as a webhook to invoke a CodePipeline job. 
 
+### Table of Contents
+**[Setting up your lambda](#setup-your-lambda)**<br>
+**[Payload Webhook Events](#bitbucket-webhook-events)**<br>
 
 ## Setup your lambda
-These settings are necessary on your lambda function:
+When creating the lambda function you need to enable the X-Ray active tracing, under the Monitoring and operations tools.
 
 ### Upload your code as a zip file to your lambda
 ```shell
-chmod +x build_deployable_zip.sh
-./build_deployable_zip.sh
+make build-zipped-lambda
 ```
+
 ### IAM Permissions
 The lambda function need the following permissions in order to fetch the keyvault secrets as well as trigger a CodePipeline run:
 ```json
@@ -22,7 +25,9 @@ The lambda function need the following permissions in order to fetch the keyvaul
       "Effect": "Allow",
       "Action": [
         "secretsmanager:GetSecretValue",
-        "codepipeline:StartPipelineExecution"
+        "codepipeline:StartPipelineExecution",
+        "xray:PutTraceSegments",
+        "xray:PutTelemetryRecords"
       ],
       "Resource": "*"
     }
@@ -30,7 +35,7 @@ The lambda function need the following permissions in order to fetch the keyvaul
 }
 ```
 ### Handler
-The name of the handler for this lambda is `codeBuildHandler.lambda_handler`
+The name of the handler for this lambda is `gitwebhooklambda.codeBuildHandler.lambda_handler`
 ### Lambda Environment variables
 This lambda function requires that a few mandatory environment variables are passed in to the lambda function. Below are the list of environment variables
 ```shell
@@ -172,6 +177,10 @@ cat << EOF | tr '\n' ' ' | pbcopy
 }
 EOF
 ```
+<br>
+
+---
+<br>
 
 ## [Bitbucket] Webhook Events
 Our current plan supports the following webhook events
@@ -195,3 +204,15 @@ Our current plan supports the following webhook events
 - PR Opened
   - Event Type `opened`
 
+<br>
+
+---
+<br>
+
+## Development considerations
+When doing local development, it is important to test any new features added. For this project we are using Pytest and all files must be placed under the tests/unit directory and any configurations and fixtures should be under the tests/conftest.py file
+
+### Running automated tests
+```shell
+make test
+```
