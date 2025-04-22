@@ -8,6 +8,7 @@ import traceback
 
 import boto3
 import requests
+from aws_lambda_powertools import Metrics, Tracer
 
 # Initialize logger
 logger = logging.getLogger()
@@ -20,20 +21,24 @@ logger.setLevel(logging.getLevelName(logging_level))
 
 # Initialize boto3
 s3 = boto3.client('s3')
-code_build = boto3.client('codebuild')
+code_pipeline = boto3.client('codepipeline')
 secrets_manager = boto3.client('secretsmanager')
 
+# Initialize powertools
+tracer = Tracer(service='CodeBuildHandler')
+metrics = Metrics(namespace='WebhookHandler', service='CodeBuildHandler')
 
+@tracer.capture_method
 def validate_lambda_env_vars(env_vars: dict):
     mandatory_environment_vars = [
-        'CODEBUILD_PROJECT_NAME',
-        'CODEBUILD_ENV_VARS_MAP',
+        'CODEPIPELINE_ENV_VARS_MAP',
         'CODEBUILD_URL',
         'GIT_SERVER_URL',
         'GIT_USERNAME_SM_ARN',
         'GIT_TOKEN_SM_ARN',
         'WEBHOOK_EVENT_TYPE',
-        'VALIDATE_DIGITAL_SIGNATURE'
+        'VALIDATE_DIGITAL_SIGNATURE',
+        'GITHUB_ENABLED_EVENTS',
     ]
     validation_errors = []
     valid = True
@@ -43,10 +48,12 @@ def validate_lambda_env_vars(env_vars: dict):
             valid = False
     return valid, " ".join(validation_errors)
 
-
+@metrics.log_metrics(capture_cold_start_metric=True)
+@tracer.capture_lambda_handler
 def lambda_handler(event, context):
     try:
         lambda_env_vars = {key: value for key, value in os.environ.items()}
+        gh_events_map = json.loads(lambda_env_vars.get("GITHUB_ENABLED_EVENTS", {}))
         valid, validation_message = validate_lambda_env_vars(lambda_env_vars)
         if not valid:
             return prepare_response(500, f"Following mandatory lambda vars not set: {validation_message}")
@@ -71,7 +78,7 @@ def lambda_handler(event, context):
         logger.info(f"Event type: {event_type}")
 
         # Verify if the lambda is configured for correct event_type
-        if str(event_type).lower() != str(lambda_env_vars.get('WEBHOOK_EVENT_TYPE')).lower():
+        if str(event_type).lower() not in list(gh_events_map.keys()):
             return prepare_response(500, f"The webhook event_type: {event_type} "
                                          f"doesn't match lambda function's event type:"
                                          f" {lambda_env_vars.get('WEBHOOK_EVENT_TYPE')}")
@@ -79,17 +86,21 @@ def lambda_handler(event, context):
         # Validate message digital signature
         if str(lambda_env_vars.get('VALIDATE_DIGITAL_SIGNATURE', 'FALSE').lower()) == 'true':
             git_secret = secrets_manager.get_secret_value(SecretId=str(lambda_env_vars.get('GIT_SECRET_SM_ARN'))).get('SecretString')
-            lambda_env_vars['GIT_SECRET'] = str(git_secret)
-            if not check_signature(git_secret, normalized_headers['x-hub-signature'], event['body']):
+            unserialized_secret = json.loads(git_secret)
+            lambda_env_vars['GIT_SECRET'] = unserialized_secret.get('SecretString', None)
+            # if not check_signature(git_secret, normalized_headers['x-hub-signature'], event['body']):
+            if not verify_signature(event['body'].encode('utf-8'), unserialized_secret.get('SecretString', None), normalized_headers['x-hub-signature-256']):
                 logger.error('Invalid webhook message signature')
                 return prepare_response(401, 'Signature is not valid')
-        env_vars = prepare_codebuild_inputs(event_body, lambda_env_vars)
+        env_vars = prepare_codepipeline_inputs(event_body, lambda_env_vars)
         if not env_vars:
             return prepare_response(500, "Unable to parse webhook payload, "
-                                         "Please verify the env var: CODEBUILD_ENV_VARS_MAP")
+                                         "Please verify the env var: CODEPIPELINE_ENV_VARS_MAP")
 
-        # Invoke the CodeBuild Job
-        codebuild_id = start_codebuild_job(lambda_env_vars.get('CODEBUILD_PROJECT_NAME'), env_vars)
+        # Invoke the CodePipeline Job
+        logger.debug(f"About to start the pipeline: {gh_events_map.get(event_type), env_vars}")
+        codepipeline_id = start_codepipeline_job(gh_events_map.get(event_type), env_vars)
+        logger.debug(f"CodePipeline: {codepipeline_id}")
 
         # Authentication
         git_username = secrets_manager.get_secret_value(SecretId=str(lambda_env_vars.get('GIT_USERNAME_SM_ARN'))).get('SecretString')
@@ -97,16 +108,17 @@ def lambda_handler(event, context):
         auth = (str(git_username), str(git_token))
 
         # Merging both dictionaries are required for the logic in invoking callback method
+
         merged_env_vars = {**env_vars, **lambda_env_vars}
         merged_env_vars['GIT_USERNAME'] = str(git_username)
         merged_env_vars['GIT_TOKEN'] = str(git_token)
         merged_env_vars['LATEST_SHORT_HASH'] = merged_env_vars.get('LATEST_COMMIT_HASH', "")[:7]
         merged_env_vars["CODEBUILD_STATUS"] = "INPROGRESS"
-        merged_env_vars["CALLBACK_DESCRIPTION"] = f"CodeBuild job with id: {codebuild_id} is submitted successfully."
+        merged_env_vars["CALLBACK_DESCRIPTION"] = f"CodeBuild job with id: {codepipeline_id} is submitted successfully."
         # Invoke the Git callback and update the build as "INPROGRESS"
         status = invoke_git_callback(merged_env_vars, auth)
         # Respond to the webhook request
-        return prepare_response(status, f"Codebuild stated with an id: {codebuild_id}")
+        return prepare_response(status, f"CodePipeline stated with an id: {codepipeline_id}")
 
     except Exception as e:
         logger.error(e)
@@ -119,21 +131,28 @@ def lambda_handler(event, context):
             logger.error(f"Unable to update Git webhook to FAILED. Resulted in error: {e}")
         return prepare_response(500, e)
 
+@tracer.capture_method
+def verify_signature(payload_body, secret_token, signature_header):
+    """Verify that the payload was sent from GitHub by validating SHA256.
 
-def check_signature(signing_secret, signature, body):
-    logger.info("Checking signature")
-    # Create a digital signature by signing the body with the provided secret (pass in as env var)
-    digest = hmac.new(signing_secret.encode('utf-8'), body.encode('utf-8'), hashlib.sha256).hexdigest()
-    logger.debug(f"Digest = {digest}")
+    Raise and return 403 if not authorized.
 
-    signature_hash = signature.split('=')
-    # Compare the created signature against the one passed in as the webhook header
-    if signature_hash[1] == digest:
-        return True
+    Args:
+        payload_body: original request body to verify (request.body())
+        secret_token: GitHub app webhook token (WEBHOOK_SECRET)
+        signature_header: header received from GitHub (x-hub-signature-256)
+    """
+    logger.info(f"Signature Header: {signature_header}")
+    if not signature_header:
+        return False
+    hash_object = hmac.new(secret_token.encode('utf-8'), msg=payload_body, digestmod=hashlib.sha256)
+    expected_signature = "sha256=" + hash_object.hexdigest()
+    logger.info(f"Computed signature: {expected_signature}")
+    if not hmac.compare_digest(expected_signature, signature_header):
+        return False
+    return True
 
-    return False
-
-
+@tracer.capture_method
 def prepare_response(status_code, detail="An unknown error has occurred."):
     if not status_code:
         raise TypeError('response_to_api_gw() expects at least argument status_code')
@@ -164,47 +183,50 @@ def prepare_response(status_code, detail="An unknown error has occurred."):
     return response
 
 
-def prepare_codebuild_inputs(body: dict, lambda_env_vars: dict):
-    code_build_env_vars = {}
+@tracer.capture_method
+def prepare_codepipeline_inputs(body: dict, lambda_env_vars: dict):
+    code_pipeline_env_vars = {}
 
     try:
-        logger.debug(f"CODEBUILD_ENV_VARS_MAP={lambda_env_vars.get('CODEBUILD_ENV_VARS_MAP')}")
-        env_vars_dict = json.loads(lambda_env_vars.get('CODEBUILD_ENV_VARS_MAP'))
+        logger.debug(f"CODEPIPELINE_ENV_VARS_MAP={lambda_env_vars.get('CODEPIPELINE_ENV_VARS_MAP')}")
+        env_vars_dict = json.loads(lambda_env_vars.get('CODEPIPELINE_ENV_VARS_MAP'))
         logger.debug(f"env_vars_dict={env_vars_dict}")
         logger.debug(f"type of env_vars_dict: {type(env_vars_dict)}")
         for env_var, json_path in env_vars_dict.items():
-            code_build_env_vars[env_var] = str(get_value_from_dict(body, json_path))
+            code_pipeline_env_vars[env_var] = get_value_from_dict(body, json_path)
         # Add any other Env Vars we want to pass to CodeBuild.
         for key, value in os.environ.items():
             if key.startswith("USERVAR_") or key.startswith("GIT_"):
-                code_build_env_vars[key] = value
+                code_pipeline_env_vars[key] = value
     except Exception as e:
         logger.error(f"Error in parsing the webhook payload: {e}")
         traceback.print_exc()
 
-    logger.info(f"Environment variables to be passed to CodeBuild: {code_build_env_vars}")
+    logger.info(f"Environment variables to be passed to CodePipeline: {code_pipeline_env_vars}")
 
-    return code_build_env_vars
+    return code_pipeline_env_vars
 
 
-def start_codebuild_job(project_name, env_vars: dict):
+@tracer.capture_method
+def start_codepipeline_job(codepipeline_name, env_vars: dict):
 
-    logger.info(f"Starting CodeBuild job for project: {project_name}")
+    logger.info(f"Starting job for CodePipeline: {codepipeline_name}")
     try:
-        code_build_env_vars = [
+        code_pipeline_env_vars = [
             {
                 'name': key,
                 'value': value
             } for key, value in env_vars.items()
         ]
-        response = code_build. \
-            start_build(projectName=project_name,
-                        environmentVariablesOverride=code_build_env_vars)
+        response = code_pipeline. \
+            start_pipeline_execution(name=codepipeline_name,
+                        variables=code_pipeline_env_vars)
     except Exception as e:
         raise e
-    return response["build"]["id"]
+    return response["pipelineExecutionId"]
 
 
+@tracer.capture_method
 def invoke_git_callback(merged_env_vars, auth):
     # Create URL object for the HTTP endpoint
     pattern = r"\{\{(\w+)\}\}"

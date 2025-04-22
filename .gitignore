@@ -4,3 +4,7 @@ venv
 terraform/
 packages/
 *.zip
+.devcontainer
+.venv
+source.env
+*__pycache__*
